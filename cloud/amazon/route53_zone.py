@@ -154,21 +154,27 @@ def main():
         module.fail_json(msg=e.error_message)
 
     results = conn.get_all_hosted_zones()
-    zones = {}
+    zones = {
+        True: {},
+        False: {},
+    }
 
     for r53zone in results['ListHostedZonesResponse']['HostedZones']:
         zone_id = r53zone['Id'].replace('/hostedzone/', '')
         zone_details = conn.get_hosted_zone(zone_id)['GetHostedZoneResponse']
+        zone_is_private = r53zone['Config']['PrivateZone'] == 'true'
         if vpc_id and 'VPCs' in zone_details:
             # this is to deal with this boto bug: https://github.com/boto/boto/pull/2882
             if isinstance(zone_details['VPCs'], dict):
                 if zone_details['VPCs']['VPC']['VPCId'] == vpc_id:
-                    zones[r53zone['Name']] = zone_id
+                    zones[zone_is_private][r53zone['Name']] = zone_id
             else: # Forward compatibility for when boto fixes that bug
                 if vpc_id in [v['VPCId'] for v in zone_details['VPCs']]:
-                    zones[r53zone['Name']] = zone_id
+                    zones[zone_is_private][r53zone['Name']] = zone_id
         else:
-            zones[r53zone['Name']] = zone_id
+            zones[zone_is_private][r53zone['Name']] = zone_id
+
+    zones = zones[private_zone]
 
     record = {
         'private_zone': private_zone,
